@@ -19,8 +19,10 @@
 (************************************************************)
 open Automaton
 open Options
-
-
+       
+(* module Z = ZZ3.Make (struct let ctx = Z3.mk_context [] end)
+open Z *)
+       
 (************************************************************)
 (** Pi 0 *)
 (************************************************************)
@@ -225,6 +227,9 @@ type abstract_model = {
 	nb_discrete : int;
 	nb_parameters : int;
 	nb_variables : int;
+
+	(* Constraints (for Z3) *)
+(*	symb_constraints : symbol array; *)
 	
 	(* Is there any stopwatch in the model? *)
 	has_stopwatches : bool;

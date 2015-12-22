@@ -29,6 +29,8 @@ open ParsingStructure
 open AbstractModel
 open ModelPrinter
 
+module Z = ZZ3.Make (struct let ctx = Z3.mk_context [] end)
+open Z
 
 (************************************************************)
 (** Exceptions *)
@@ -2658,7 +2660,9 @@ let abstract_model_of_parsing_structure (parsed_variable_declarations, parsed_au
 	(* Is the model an L/U-PTA? *)
 	lu_status = lu_status;
 
-	
+	(* CC: initialize the table that contains the names of the symbols used by Z3 *)
+	(* symb_constraints = Array.make nb_parameters (fun i -> Symbol.declare Real ( variable_names i ) ); *)
+
 	(* The observer *)
 	observer_pta = observer_automaton;
 	is_observer = (fun automaton_index ->
