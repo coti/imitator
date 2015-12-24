@@ -20,7 +20,12 @@
 open Automaton
 open Options
 
-module Poulet : ZZ3_sigs.S
+module Pintade =
+  struct
+    let ctx = Z3.mk_context []
+  end
+		   
+module Poulet = ZZ3.Make (Pintade)
 open Poulet
        
 (************************************************************)

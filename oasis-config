@@ -26,9 +26,10 @@ Executable imitator
   Path:       .
   BuildTools: ocamlbuild
   MainIs:     src/IMITATOR.ml
-  BuildDepends: gmp, extlib, ppl, str, unix, threads
+  BuildDepends: gmp, extlib, ppl, str, unix, threads, Z3, Z3overlay
 #  CCLib: -lstdc++
-  CCLib: -static '-lppl -ltinfo -lppl_ocaml -lstdc++ -lgmp -lgmpxx'
+#  CCLib: -static '-lppl -ltinfo -lppl_ocaml -lstdc++ -lgmp -lgmpxx'
+  CCLib: '-lppl -ltinfo -lppl_ocaml -lstdc++ -lgmp -lgmpxx'
 
 # -static to have a static compiling (+ ' ' around)
 # I removed -lcamlrun because I wrote "best" instead of "byte"

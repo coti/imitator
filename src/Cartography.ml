@@ -31,11 +31,7 @@ open Reachability
 
 
 (** We hide the context by instanciating a functor: *)
-module Z = ZZ3.Make (struct let ctx = Z3.mk_context [] end)
-open Z
-
-
-
+open AbstractModel.Poulet
 
 (************************************************************)
 (* Types *)
@@ -811,12 +807,12 @@ let bc_initialize () =
 	 *)
 
 	let solver = Solver.make () in
-	let symb_constraints = Array.init !nb_dimensions (fun i -> Symbol.declare Real ( model.variable_names i ) ) in 
+	(*	let tab_constraints = Array.init !nb_dimensions (fun i -> Symbol.declare Real ( model.variable_names i ) ) in *)
 	Array.iteri (fun i x ->
 		     let t = T.( int ( NumConst.to_int ( v0#get_min i ) ) <= !x
 				 && !x <= int( NumConst.to_int ( v0#get_max i ) ) ) in
 		     Solver.add ~solver t ;
-		    ) symb_constraints;
+		    ) model.symb_constraints;
 	
 	(* CC : ça va dégager ça *)
 	(* Min & max bounds for the parameters *)
