@@ -401,10 +401,22 @@ let compute_initial_pi0 () =
 	| Cover_cartography ->
 		let pi0 = new PVal.pval in
 		(* Copy min bounds *)
-		for parameter_index = 0 to model.nb_parameters - 1 do
+		(* for parameter_index = 0 to model.nb_parameters - 1 do
 			pi0#set_value parameter_index !min_bounds.(parameter_index);
 		done;
-		
+		 *)
+		let result = Solver.check ~solver:(model.z3_solver) [] in
+		let z3model = match result with
+		  | Unsat _ | Unkown _ -> failwith "Oh noees"
+		  | Sat (lazy m) -> m
+		in
+		Array.iteri (fun i x ->
+			     let value = Model.get_value ~model:z3model x in ()
+			     (* DM temp
+			     pi0#set_value i (NumConst.numconst_of_mpq (Gmp.Q.from_string (Q.to_string value)));
+                              *)		     
+			    ) model.symb_constraints;
+		  
 		current_pi0 := Some pi0;
 		(*
 		(*** BEGIN DEBUG ***)
