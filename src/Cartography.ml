@@ -374,7 +374,20 @@ let leq_returned_constraint rc1 rc2 =
 	| _ -> false
 
 
+let gmpz_to_z (x : Gmp.Z.t) : Z.t =
+  Z.of_string (Gmp.Z.to_string x)
 
+let z_to_gmpz (x : Z.t) : Gmp.Z.t =
+  Gmp.Z.from_string (Z.to_string x)
+
+let q_to_gmpq (x : Q.t) : Gmp.Q.t =
+  Gmp.Q.div (Gmp.Q.from_z (z_to_gmpz (Q.num x)))
+	    (Gmp.Q.from_z (z_to_gmpz (Q.den x)))
+
+let gmpq_to_q (x : Gmp.Q.t) : Q.t =
+  Q.(///) (gmpz_to_z (Gmp.Q.get_num x))
+	  (gmpz_to_z (Gmp.Q.get_den x))
+	    
 (************************************************************)
 (* Initial pi0 functions *)
 (************************************************************)
@@ -411,10 +424,9 @@ let compute_initial_pi0 () =
 		  | Sat (lazy m) -> m
 		in
 		Array.iteri (fun i x ->
-			     let value = Model.get_value ~model:z3model x in ()
-			     (* DM temp
-			     pi0#set_value i (NumConst.numconst_of_mpq (Gmp.Q.from_string (Q.to_string value)));
-                              *)		     
+			     let value = Model.get_value ~model:z3model x in
+			     pi0#set_value i
+			       (NumConst.numconst_of_mpq (q_to_gmpq value))
 			    ) model.symb_constraints;
 		  
 		current_pi0 := Some pi0;
