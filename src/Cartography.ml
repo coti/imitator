@@ -806,12 +806,12 @@ let bc_initialize () =
 	 * Bound them by asserting the formula in the solver
 	 *)
 
-	let solver = Solver.make () in
+	(*	let solver = Solver.make () in*)
 	(*	let tab_constraints = Array.init !nb_dimensions (fun i -> Symbol.declare Real ( model.variable_names i ) ) in *)
 	Array.iteri (fun i x ->
 		     let t = T.( int ( NumConst.to_int ( v0#get_min i ) ) <= !x
 				 && !x <= int( NumConst.to_int ( v0#get_max i ) ) ) in
-		     Solver.add ~solver t ;
+		     Solver.add ~solver:(model.z3_solver) t ;
 		    ) model.symb_constraints;
 	
 	(* CC : ça va dégager ça *)
