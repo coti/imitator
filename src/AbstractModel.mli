@@ -230,6 +230,7 @@ type abstract_model = {
 
 	(* Constraints (for Z3 *)
 	symb_constraints : (Q.t, zreal) symbol array;
+	z3_solver : Z3.Solver.solver;
 	
 	(* Is there any stopwatch in the model? *)
 	has_stopwatches : bool;

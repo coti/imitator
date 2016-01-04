@@ -2661,6 +2661,7 @@ let abstract_model_of_parsing_structure (parsed_variable_declarations, parsed_au
 
 	(* CC: initialize the table that contains the names of the symbols used by Z3 *)
 	symb_constraints = Array.init nb_parameters (fun i -> Symbol.declare Real ( variable_names i ) );
+	z3_solver = Solver.make ();
 
 	(* The observer *)
 	observer_pta = observer_automaton;
