@@ -388,6 +388,32 @@ let gmpq_to_q (x : Gmp.Q.t) : Q.t =
   Q.(///) (gmpz_to_z (Gmp.Q.get_num x))
 	  (gmpz_to_z (Gmp.Q.get_den x))
 	    
+(** Ask Z3 to pick up a point  that satisfies the constraints
+ * Return (found_pi0 : bool)
+ *)
+let z3_get_point() =
+  let model = Input.get_model() in
+  let result = Solver.check ~solver:(model.z3_solver) [] in
+  let z3model = match result with
+    | Unkown _ -> failwith "Oh noees"
+    | Sat (lazy m) -> m
+  in
+  let found_pi0 = match result with
+    | Unsat _ -> false
+    | Sat _ -> true
+  in
+  let pi0 = new PVal.pval in
+
+  Array.iteri (fun i x ->
+	       let value = Model.get_value ~model:z3model x in
+	       pi0#set_value i
+			     (NumConst.numconst_of_mpq (q_to_gmpq value))
+	      ) model.symb_constraints;
+  
+  current_pi0 := Some pi0;
+  found_pi0
+
+
 (************************************************************)
 (* Initial pi0 functions *)
 (************************************************************)
@@ -412,25 +438,9 @@ let compute_initial_pi0 () =
 	
 	(* Instantiate with the lower bounds *)
 	| Cover_cartography ->
-		let pi0 = new PVal.pval in
-		(* Copy min bounds *)
-		(* for parameter_index = 0 to model.nb_parameters - 1 do
-			pi0#set_value parameter_index !min_bounds.(parameter_index);
-		done;
-		 *)
-		let result = Solver.check ~solver:(model.z3_solver) [] in
-		let z3model = match result with
-		  | Unsat _ | Unkown _ -> failwith "Oh noees"
-		  | Sat (lazy m) -> m
-		in
-		Array.iteri (fun i x ->
-			     let value = Model.get_value ~model:z3model x in
-			     pi0#set_value i
-			       (NumConst.numconst_of_mpq (q_to_gmpq value))
-			    ) model.symb_constraints;
-		  
-		current_pi0 := Some pi0;
-		(*
+	   z3_get_point() 
+	   
+	(*
 		(*** BEGIN DEBUG ***)
 		;
 		let pi0_fun = pi0_fun_of_current_pi0 () in
@@ -655,7 +665,6 @@ let compute_next_sequential_pi0 () =
 	!more_pi0
 
 
-
 (** Compute the next pi0 by sequentially trying all points until a point not covered is found; and then directly modify the internal variable 'current_pi0' (standard BC)
  * Return (found_pi0 : bool, nb_useless_points : int)
  *)
@@ -676,6 +685,7 @@ let find_next_pi0_cover () =
 (*(*		(* Did we reach the time limit *)
 	let time_limit_reached = ref false in*)*)
 
+	(* CC COMMENTED OUT *)
 	while !more_pi0 && not !time_limit_reached && not !found_pi0 do
 		
 		(* 1) Compute the next pi0 (if any left) in a sequential manner; the function returns false if all has been covered *)
@@ -690,6 +700,8 @@ let find_next_pi0_cover () =
 		
 	done; (* while more pi0 and so on *)
 	
+	 (* END *)
+
 	(* Return info (note that current_pi0 has ALREADY been updated if a suitable pi0 was found !) *)
 	!found_pi0 (*, !nb_useless_points*)
       
