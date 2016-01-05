@@ -685,7 +685,9 @@ let find_next_pi0_cover () =
 (*(*		(* Did we reach the time limit *)
 	let time_limit_reached = ref false in*)*)
 
-	(* CC COMMENTED OUT *)
+	found_pi0 := z3_get_point();
+
+	(* CC COMMENTED OUT
 	while !more_pi0 && not !time_limit_reached && not !found_pi0 do
 		
 		(* 1) Compute the next pi0 (if any left) in a sequential manner; the function returns false if all has been covered *)
@@ -700,7 +702,7 @@ let find_next_pi0_cover () =
 		
 	done; (* while more pi0 and so on *)
 	
-	 (* END *)
+	  END *)
 
 	(* Return info (note that current_pi0 has ALREADY been updated if a suitable pi0 was found !) *)
 	!found_pi0 (*, !nb_useless_points*)
