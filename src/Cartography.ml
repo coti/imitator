@@ -374,6 +374,7 @@ let leq_returned_constraint rc1 rc2 =
 	| _ -> false
 
 
+(* DM: this should probably be somewhere else *)
 let gmpz_to_z (x : Gmp.Z.t) : Z.t =
   Z.of_string (Gmp.Z.to_string x)
 
@@ -536,6 +537,7 @@ let test_pi0_uncovered current_pi0 found_pi0 =
 let one_random_pi0 () =
 	(* Get the model *)
 	let model = Input.get_model() in
+	
 	(* Get the v0 *)
 	let v0 = Input.get_v0() in
 	(* Retrieve the input options *)
@@ -1104,51 +1106,54 @@ let bc_enlarge_constraint im_result =
 ();;
 
 
-module Z3Terms = AbstractModel.Poulet.T;;
+module Z3Types = AbstractModel.Poulet
+module Z3Terms = Z3Types.T;;
 
 (* DM *)
-let rec translate_linear_expression (expr : Ppl_ocaml.linear_expression) =
+let rec translate_linear_expression symbols (expr : Ppl_ocaml.linear_expression) :
+  Z3Types.zreal Z3Types.term =
   match expr with
-  | Ppl_ocaml.Variable v -> (* FIXME *) Z3Terms.int 0
-  | Ppl_ocaml.Coefficient z -> Z3Terms.bigint (gmpz_to_z z)
-  | Ppl_ocaml.Unary_Plus e -> translate_linear_expression e
-  | Ppl_ocaml.Unary_Minus e -> Z3Terms.neg (translate_linear_expression e)
-  | Ppl_ocaml.Plus(e1, e2) -> Z3Terms.add [translate_linear_expression e1;
-                                           translate_linear_expression e2]
-  | Ppl_ocaml.Minus(e1, e2) -> Z3Terms.sub [translate_linear_expression e1;
-                                            translate_linear_expression e2] 
-  | Ppl_ocaml.Times(k, e) -> Z3Terms.mul [Z3Terms.bigint (gmpz_to_z k);
-                                          translate_linear_expression e];;
+  | Ppl_ocaml.Variable v -> Z3Terms.symbol (Array.get symbols v)
+  | Ppl_ocaml.Coefficient z -> Z3Terms.i2q (Z3Terms.bigint (gmpz_to_z z))
+  | Ppl_ocaml.Unary_Plus e -> translate_linear_expression symbols e
+  | Ppl_ocaml.Unary_Minus e -> Z3Terms.neg (translate_linear_expression symbols e)
+  | Ppl_ocaml.Plus(e1, e2) -> Z3Terms.add [translate_linear_expression symbols e1;
+                                           translate_linear_expression symbols e2]
+  | Ppl_ocaml.Minus(e1, e2) -> Z3Terms.sub [translate_linear_expression symbols e1;
+                                            translate_linear_expression symbols e2] 
+  | Ppl_ocaml.Times(k, e) -> Z3Terms.mul [Z3Terms.i2q (Z3Terms.bigint (gmpz_to_z k));
+                                          translate_linear_expression symbols e];;
 
 (* DM *)
-let translate_inequality =
-       function
+let translate_inequality symbols (inequality : Ppl_ocaml.linear_constraint) : Z3Types.zbool Z3Types.term =
+       match inequality with
        | Ppl_ocaml.Less_Than(lhs, rhs) ->
-           Z3Terms.lt (translate_linear_expression lhs)
-	              (translate_linear_expression rhs)
+           Z3Terms.lt (translate_linear_expression symbols lhs)
+	              (translate_linear_expression symbols rhs)
        | Ppl_ocaml.Less_Or_Equal(lhs, rhs) ->
-           Z3Terms.le (translate_linear_expression lhs)
-	              (translate_linear_expression rhs)
+           Z3Terms.le (translate_linear_expression symbols lhs)
+	              (translate_linear_expression symbols rhs)
        | Ppl_ocaml.Equal(lhs, rhs) ->
-           Z3Terms.eq (translate_linear_expression lhs)
-	              (translate_linear_expression rhs)
+           Z3Terms.eq (translate_linear_expression symbols lhs)
+	              (translate_linear_expression symbols rhs)
        | Ppl_ocaml.Greater_Than(lhs, rhs) ->
-           Z3Terms.gt (translate_linear_expression lhs)
-	              (translate_linear_expression rhs);
+           Z3Terms.gt (translate_linear_expression symbols lhs)
+	              (translate_linear_expression symbols rhs);
        | Ppl_ocaml.Greater_Or_Equal(lhs, rhs) ->
-           Z3Terms.ge (translate_linear_expression lhs)
-	              (translate_linear_expression rhs)
+           Z3Terms.ge (translate_linear_expression symbols lhs)
+	              (translate_linear_expression symbols rhs)
 
 (* DM *)
-let translate_polyhedron (poly : Ppl_ocaml.polyhedron) =
+let translate_polyhedron symbols (poly : Ppl_ocaml.polyhedron) =
      let inequalities = Ppl_ocaml.ppl_Polyhedron_get_constraints poly in
-     Z3Terms.and_ (List.map translate_inequality inequalities)
+     Z3Terms.and_ (List.map (translate_inequality symbols) inequalities)
 
 (* DM *)
 let block_constraint (constr : AbstractModel.returned_constraint) =
+  let model = Input.get_model() in
   match constr with
   | Convex_constraint(poly, tile_nature) ->
-    let to_be_blocked = translate_polyhedron poly in ()
+    let to_be_blocked = translate_polyhedron model.symb_constraints poly in ()
   | Union_of_constraints(_, _) -> failwith "block_constraints does not support Union_of_constraints"
   | NNCConstraint(_, _, _) -> failwith "block_constraints does not support NNCConstraint"
 					     
