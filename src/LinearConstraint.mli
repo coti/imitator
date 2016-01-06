@@ -142,14 +142,18 @@ val string_of_p_linear_inequality : (variable -> string) -> p_linear_inequality 
 (*** NOTE Should be removed ***)
 (* type linear_constraint *)
 
+										     
+(* DM *)
+type linear_constraint = Ppl_ocaml.polyhedron
+										    
 (** Constraint on the parameters *)
-type p_linear_constraint
+type p_linear_constraint = linear_constraint (* DM *)
 
 (** Constraint on the parameters and clocks *)
-type px_linear_constraint
+type px_linear_constraint = linear_constraint (* DM *)
 
 (** Constraint on the parameters, clocks and discrete *)
-type pxd_linear_constraint
+type pxd_linear_constraint = linear_constraint (* DM *)
 
 
 (*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-**)

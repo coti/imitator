@@ -1153,7 +1153,8 @@ let block_constraint (constr : AbstractModel.returned_constraint) =
   let model = Input.get_model() in
   match constr with
   | Convex_constraint(poly, tile_nature) ->
-    let to_be_blocked = translate_polyhedron model.symb_constraints poly in ()
+    let to_be_blocked = translate_polyhedron model.symb_constraints poly in
+    Z3Types.Solver.add ~solver:(model.z3_solver) (Z3Terms.not to_be_blocked)
   | Union_of_constraints(_, _) -> failwith "block_constraints does not support Union_of_constraints"
   | NNCConstraint(_, _, _) -> failwith "block_constraints does not support NNCConstraint"
 					     
