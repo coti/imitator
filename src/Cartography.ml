@@ -1207,11 +1207,8 @@ let bc_integrate_result im_result =
 	  ()
 	);
 	
-	(* CC *)
-	if not found then(
-        (* DM *)
-	  block_constraint im_result.result
-	);
+	(* CC + DM *)
+	block_constraint im_result.result;
 	
 	(*------------------------------------------------------------*)
 	
