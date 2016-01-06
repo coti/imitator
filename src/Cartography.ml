@@ -1104,12 +1104,21 @@ let bc_enlarge_constraint im_result =
 ();;
 
 
-module Z3Terms = AbstractModel.Poulet.T
+module Z3Terms = AbstractModel.Poulet.T;;
 
 (* DM *)
-let translate_linear_expression (expr : Ppl_ocaml.linear_expression) =
-  (* FIXME *)
-  Z3Terms.int 0
+let rec translate_linear_expression (expr : Ppl_ocaml.linear_expression) =
+  match expr with
+  | Ppl_ocaml.Variable v -> (* FIXME *) Z3Terms.int 0
+  | Ppl_ocaml.Coefficient z -> Z3Terms.bigint (gmpz_to_z z)
+  | Ppl_ocaml.Unary_Plus e -> translate_linear_expression e
+  | Ppl_ocaml.Unary_Minus e -> Z3Terms.neg (translate_linear_expression e)
+  | Ppl_ocaml.Plus(e1, e2) -> Z3Terms.add [translate_linear_expression e1;
+                                           translate_linear_expression e2]
+  | Ppl_ocaml.Minus(e1, e2) -> Z3Terms.sub [translate_linear_expression e1;
+                                            translate_linear_expression e2] 
+  | Ppl_ocaml.Times(k, e) -> Z3Terms.mul [Z3Terms.bigint (gmpz_to_z k);
+                                          translate_linear_expression e];;
   
 (* DM *)
 let block_constraint (constr : AbstractModel.returned_constraint) =
