@@ -1018,8 +1018,144 @@ let bc_initialize_subpart () =
 	(*** TODO : check that initial pi0 is suitable!! (could be incompatible with initial constraint) ***)
 	()
 
+(** print the constraint we just got from IM 
+ **)
+let bc_print_constraint im_result =
+  let model = Input.get_model() in
+  
+  (*** NOTE: it may actually be more clever to check the tile nature from the graph, especially if we go for more complicated properties!! ***)
+  
+  (* 			let bad_string = if StateSpace.is_bad model graph then "BAD." else "GOOD." in *)
+  print_message Verbose_low ("Constraint K0 computed:");
+  print_message Verbose_standard (ModelPrinter.string_of_returned_constraint model.variable_names im_result.result);
+  if model.correctness_condition <> None then(
+    print_message Verbose_medium ("This tile is " ^ (string_of_tile_nature im_result.tile_nature) ^ ".");
+  );
+()
 
+(** Check whether the constraint is included in another one we have already computed
+ **)
+let bc_is_included im_result =
+  let found = ref false in
+  let array_index = ref 0 in
+  while not !found && !array_index < (DynArray.length !computed_constraints) do
+    if verbose_mode_greater Verbose_high then
+      print_message Verbose_high ("Comparing new constraint with " ^ (string_of_int (!array_index+1)) ^ "th old constraint.");
+    (* Retrieve the i-th constraint *)
+    let ith_constraint = DynArray.get !computed_constraints !array_index in
+    (* Compare *)
+    (*** TODO: perform the inclusion check "new \in old" only in PaTATOR mode! because the situation new \in old will never happen in the mononode, sequential cartography ***)
+    if leq_returned_constraint im_result.result ith_constraint then(
+      (* Stop *)
+      found := true;
+      (* Print some information *)
+      print_message Verbose_standard "Constraint included in another one previously computed: dropped.";
+    )else(
+      (* Compare the other way round (if included, just replace) *)
+      if leq_returned_constraint ith_constraint im_result.result then(
+	(* Replace *)
+	DynArray.set !computed_constraints !array_index im_result.result;
+	(* Stop *)
+	found := true;
+	(* Print some information *)
+	print_message Verbose_standard "Constraint larger than another one previously computed: replace.";
+      ); (* if larger *)
+    );
+    (* Increment *)
+    array_index := !array_index + 1;
+  done;
+  !found
+  
+(** Integrate the computed constraint 
+ **)
+let bc_integrate_result im_result =
+	(* Get the model *)
+	let model = Input.get_model() in
+	(* Retrieve the input options *)
+	let options = Input.get_options () in
 
+	if im_result.premature_stop then(
+	  print_message Verbose_standard "This constraint is valid despite premature termination.";
+	);
+	
+	(* Print the constraint *)
+	bc_print_constraint im_result;
+	(* Process the constraint(s) in some cases *)
+	begin
+	  (* Branching *)
+	  match options#imitator_mode with
+	  | Cover_cartography ->
+	     (* Just return the constraint *)
+	     ()
+	       
+	  | Border_cartography ->
+	     (* The function depends whether the zone is good or bad *)
+	     let nb_enlargements = ref 0 in
+	     let enlarge =
+	       match im_result.tile_nature with
+	       (* If good: take all points from zero *)
+	       | Good -> LinearConstraint.grow_to_zero_assign
+	       (* If bad: take all points above *)
+	       | Bad -> LinearConstraint.grow_to_infinite_assign
+	       | _ -> raise (InternalError ("Tile nature should be good or bad only, so far "))
+	     in
+	     (* Apply this to the constraint(s) *)
+	     begin match im_result.result with
+		   | Convex_constraint (k, _) ->
+		      (*** NOTE: Quite costly test, but interesting for statistics and readability ***)
+		      let old_k = LinearConstraint.p_copy k in
+		      enlarge model.parameters model.clocks_and_discrete k;
+		      if not (LinearConstraint.p_is_equal k old_k) then nb_enlargements := !nb_enlargements + 1;
+		   | Union_of_constraints (k_list, _) ->
+		      List.iter (fun k ->
+				 (*** NOTE: Quite costly test, but interesting for statistics and readability ***)
+				 let old_k = LinearConstraint.p_copy k in
+				 enlarge model.parameters model.clocks_and_discrete k;
+				 if not (LinearConstraint.p_is_equal k old_k) then nb_enlargements := !nb_enlargements + 1;
+				) k_list
+		   | NNCConstraint _ -> raise (InternalError ("NNCCs are not available everywhere yet."))
+	     end;
+	     
+	     if !nb_enlargements > 0 then(
+	       print_message Verbose_standard ("Constraint after enlarging:" ^ (if !nb_enlargements > 1 then " ("  ^ (string_of_int !nb_enlargements) ^ " enlargements)" else ""));
+	       print_message Verbose_standard (ModelPrinter.string_of_returned_constraint model.variable_names im_result.result);
+	     );
+	     
+	  | _ -> raise (InternalError("In function 'cover_behavioral_cartography', the mode should be a cover / border cartography only."))
+	end; (* end process constraint *)
+	
+	
+	(* Add the pi0 and the computed constraint *)
+	(* USELESS SO FAR 
+		DynArray.add pi0_computed pi0; *)
+	
+	(*------------------------------------------------------------*)
+	(* At least checks whether the new constraint is INCLUDED (or equal) into a former one *)
+	(*** TODO: check reverse inclusion / merge constraints together / etc. ***)
+
+	let found = bc_is_included im_result in
+	
+	  
+	(* Only add if not found *)
+	if not found then(
+	  print_message Verbose_medium "Constraint not found earlier: add.";
+	  (*** TODO: add to file if options#output_result is enabled ***)
+	  DynArray.add !computed_constraints im_result.result;
+	)else(
+	  (*** TODO: add a counter or something, for information purpose ***)
+	  ()
+	);
+	
+	(* CC *)
+	if not found then(
+	  
+	);
+	
+	(*------------------------------------------------------------*)
+	
+	(* Return true only if really added *)
+	not (found)
+	    
 
 (*------------------------------------------------------------*)
 (** Auxiliary function: process the result of IM; return true if the constraint is indeed added, false otherwise *)
@@ -1065,119 +1201,7 @@ let bc_process_im_result im_result =
 		
 	(* VALID RESULT *)
 	if !valid_result then(
-		if im_result.premature_stop then(
-			print_message Verbose_standard "This constraint is valid despite premature termination.";
-		);
-	
-		(* Print the constraint *)
-		
-		(*** NOTE: it may actually be more clever to check the tile nature from the graph, especially if we go for more complicated properties!! ***)
-		
-		
-	(* 			let bad_string = if StateSpace.is_bad model graph then "BAD." else "GOOD." in *)
-		print_message Verbose_low ("Constraint K0 computed:");
-		print_message Verbose_standard (ModelPrinter.string_of_returned_constraint model.variable_names im_result.result);
-		if model.correctness_condition <> None then(
-			print_message Verbose_medium ("This tile is " ^ (string_of_tile_nature im_result.tile_nature) ^ ".");
-		);
-
-		(* Process the constraint(s) in some cases *)
-		begin
-		(* Branching *)
-		match options#imitator_mode with
-		| Cover_cartography ->
-			(* Just return the constraint *)
-			()
-
-		| Border_cartography ->
-			(* The function depends whether the zone is good or bad *)
-			let nb_enlargements = ref 0 in
-			let enlarge =
-				match im_result.tile_nature with
-				(* If good: take all points from zero *)
-				| Good -> LinearConstraint.grow_to_zero_assign
-				(* If bad: take all points above *)
-				| Bad -> LinearConstraint.grow_to_infinite_assign
-				| _ -> raise (InternalError ("Tile nature should be good or bad only, so far "))
-			in
-			(* Apply this to the constraint(s) *)
-			begin match im_result.result with
-				| Convex_constraint (k, _) ->
-					(*** NOTE: Quite costly test, but interesting for statistics and readability ***)
-					let old_k = LinearConstraint.p_copy k in
-					enlarge model.parameters model.clocks_and_discrete k;
-					if not (LinearConstraint.p_is_equal k old_k) then nb_enlargements := !nb_enlargements + 1;
-				| Union_of_constraints (k_list, _) ->
-					List.iter (fun k ->
-						(*** NOTE: Quite costly test, but interesting for statistics and readability ***)
-						let old_k = LinearConstraint.p_copy k in
-						enlarge model.parameters model.clocks_and_discrete k;
-						if not (LinearConstraint.p_is_equal k old_k) then nb_enlargements := !nb_enlargements + 1;
-					) k_list
-				| NNCConstraint _ -> raise (InternalError ("NNCCs are not available everywhere yet."))
-			end;
-			
-			if !nb_enlargements > 0 then(
-				print_message Verbose_standard ("Constraint after enlarging:" ^ (if !nb_enlargements > 1 then " ("  ^ (string_of_int !nb_enlargements) ^ " enlargements)" else ""));
-				print_message Verbose_standard (ModelPrinter.string_of_returned_constraint model.variable_names im_result.result);
-			);
-
-		| _ -> raise (InternalError("In function 'cover_behavioral_cartography', the mode should be a cover / border cartography only."))
-		end; (* end process constraint *)
-		
-		
-		(* Add the pi0 and the computed constraint *)
-		(* USELESS SO FAR 
-		DynArray.add pi0_computed pi0; *)
-		
-		(*------------------------------------------------------------*)
-		(* At least checks whether the new constraint is INCLUDED (or equal) into a former one *)
-		(*** TODO: check reverse inclusion / merge constraints together / etc. ***)
-		let found = ref false in
-		let array_index = ref 0 in
-		while not !found && !array_index < (DynArray.length !computed_constraints) do
-			if verbose_mode_greater Verbose_high then
-				print_message Verbose_high ("Comparing new constraint with " ^ (string_of_int (!array_index+1)) ^ "th old constraint.");
-			(* Retrieve the i-th constraint *)
-			let ith_constraint = DynArray.get !computed_constraints !array_index in
-			(* Compare *)
-			(*** TODO: perform the inclusion check "new \in old" only in PaTATOR mode! because the situation new \in old will never happen in the mononode, sequential cartography ***)
-			if leq_returned_constraint im_result.result ith_constraint then(
-				(* Stop *)
-				found := true;
-				(* Print some information *)
-				print_message Verbose_standard "Constraint included in another one previously computed: dropped.";
-			)else(
-				(* Compare the other way round (if included, just replace) *)
-				if leq_returned_constraint ith_constraint im_result.result then(
-					(* Replace *)
-					DynArray.set !computed_constraints !array_index im_result.result;
-					(* Stop *)
-					found := true;
-					(* Print some information *)
-					print_message Verbose_standard "Constraint larger than another one previously computed: replace.";
-				); (* if larger *)
-			);
-			
-			
-			
-			(* Increment *)
-			array_index := !array_index + 1;
-		done;
-		
-		(* Only add if not found *)
-		if not !found then(
-			print_message Verbose_medium "Constraint not found earlier: add.";
-			(*** TODO: add to file if options#output_result is enabled ***)
-			DynArray.add !computed_constraints im_result.result;
-		)else(
-			(*** TODO: add a counter or something, for information purpose ***)
-			()
-		);
-		(*------------------------------------------------------------*)
-		
-		(* Return true only if really added *)
-		not (!found)
+	  bc_integrate_result im_result
 	
 	(* INVALID RESULT *)
 	)else(
