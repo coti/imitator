@@ -1101,9 +1101,44 @@ let bc_enlarge_constraint im_result =
     print_message Verbose_standard ("Constraint after enlarging:" ^ (if !nb_enlargements > 1 then " ("  ^ (string_of_int !nb_enlargements) ^ " enlargements)" else ""));
     print_message Verbose_standard (ModelPrinter.string_of_returned_constraint model.variable_names im_result.result);
   );
-()     
+();;
 
+
+module Z3Terms = AbstractModel.Poulet.T
+
+(* DM *)
+let translate_linear_expression (expr : Ppl_ocaml.linear_expression) =
+  (* FIXME *)
+  Z3Terms.int 0
   
+(* DM *)
+let block_constraint (constr : AbstractModel.returned_constraint) =
+  match constr with
+  | Convex_constraint((poly : Ppl_ocaml.polyhedron), tile_nature) ->
+     let inequalities = Ppl_ocaml.ppl_Polyhedron_get_constraints poly in
+     let z3_inequalities = List.map
+       (function
+       | Ppl_ocaml.Less_Than(lhs, rhs) ->
+           Z3Terms.lt (translate_linear_expression lhs)
+	              (translate_linear_expression rhs)
+       | Ppl_ocaml.Less_Or_Equal(lhs, rhs) ->
+           Z3Terms.le (translate_linear_expression lhs)
+	              (translate_linear_expression rhs)
+       | Ppl_ocaml.Equal(lhs, rhs) ->
+           Z3Terms.eq (translate_linear_expression lhs)
+	              (translate_linear_expression rhs)
+       | Ppl_ocaml.Greater_Than(lhs, rhs) ->
+           Z3Terms.gt (translate_linear_expression lhs)
+	              (translate_linear_expression rhs);
+       | Ppl_ocaml.Greater_Or_Equal(lhs, rhs) ->
+           Z3Terms.ge (translate_linear_expression lhs)
+	              (translate_linear_expression rhs)
+       ) inequalities in 
+     ()
+  
+  | Union_of_constraints(_, _) -> failwith "block_constraints does not support Union_of_constraints"
+  | NNCConstraint(_, _, _) -> failwith "block_constraints does not support NNCConstraint"
+					     
 (** Integrate the computed constraint 
  **)
 let bc_integrate_result im_result =
@@ -1155,7 +1190,8 @@ let bc_integrate_result im_result =
 	
 	(* CC *)
 	if not found then(
-	  
+        (* DM *)
+	  block_constraint im_result.result
 	);
 	
 	(*------------------------------------------------------------*)
