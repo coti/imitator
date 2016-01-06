@@ -1065,6 +1065,44 @@ let bc_is_included im_result =
     array_index := !array_index + 1;
   done;
   !found
+
+(** enlarge your constraint
+ **)
+let bc_enlarge_constraint im_result =
+  (* Get the model *)
+  let model = Input.get_model() in
+  (* The function depends whether the zone is good or bad *)
+  let nb_enlargements = ref 0 in
+  let enlarge =
+    match im_result.tile_nature with
+    (* If good: take all points from zero *)
+    | Good -> LinearConstraint.grow_to_zero_assign
+    (* If bad: take all points above *)
+    | Bad -> LinearConstraint.grow_to_infinite_assign
+    | _ -> raise (InternalError ("Tile nature should be good or bad only, so far "))
+  in
+  (* Apply this to the constraint(s) *)
+  begin match im_result.result with
+	| Convex_constraint (k, _) ->
+	   (*** NOTE: Quite costly test, but interesting for statistics and readability ***)
+	   let old_k = LinearConstraint.p_copy k in
+	   enlarge model.parameters model.clocks_and_discrete k;
+	   if not (LinearConstraint.p_is_equal k old_k) then nb_enlargements := !nb_enlargements + 1;
+	| Union_of_constraints (k_list, _) ->
+	   List.iter (fun k ->
+		      (*** NOTE: Quite costly test, but interesting for statistics and readability ***)
+		      let old_k = LinearConstraint.p_copy k in
+		      enlarge model.parameters model.clocks_and_discrete k;
+		      if not (LinearConstraint.p_is_equal k old_k) then nb_enlargements := !nb_enlargements + 1;
+		     ) k_list
+	| NNCConstraint _ -> raise (InternalError ("NNCCs are not available everywhere yet."))
+  end;
+  if !nb_enlargements > 0 then(
+    print_message Verbose_standard ("Constraint after enlarging:" ^ (if !nb_enlargements > 1 then " ("  ^ (string_of_int !nb_enlargements) ^ " enlargements)" else ""));
+    print_message Verbose_standard (ModelPrinter.string_of_returned_constraint model.variable_names im_result.result);
+  );
+()     
+
   
 (** Integrate the computed constraint 
  **)
@@ -1089,37 +1127,7 @@ let bc_integrate_result im_result =
 	     ()
 	       
 	  | Border_cartography ->
-	     (* The function depends whether the zone is good or bad *)
-	     let nb_enlargements = ref 0 in
-	     let enlarge =
-	       match im_result.tile_nature with
-	       (* If good: take all points from zero *)
-	       | Good -> LinearConstraint.grow_to_zero_assign
-	       (* If bad: take all points above *)
-	       | Bad -> LinearConstraint.grow_to_infinite_assign
-	       | _ -> raise (InternalError ("Tile nature should be good or bad only, so far "))
-	     in
-	     (* Apply this to the constraint(s) *)
-	     begin match im_result.result with
-		   | Convex_constraint (k, _) ->
-		      (*** NOTE: Quite costly test, but interesting for statistics and readability ***)
-		      let old_k = LinearConstraint.p_copy k in
-		      enlarge model.parameters model.clocks_and_discrete k;
-		      if not (LinearConstraint.p_is_equal k old_k) then nb_enlargements := !nb_enlargements + 1;
-		   | Union_of_constraints (k_list, _) ->
-		      List.iter (fun k ->
-				 (*** NOTE: Quite costly test, but interesting for statistics and readability ***)
-				 let old_k = LinearConstraint.p_copy k in
-				 enlarge model.parameters model.clocks_and_discrete k;
-				 if not (LinearConstraint.p_is_equal k old_k) then nb_enlargements := !nb_enlargements + 1;
-				) k_list
-		   | NNCConstraint _ -> raise (InternalError ("NNCCs are not available everywhere yet."))
-	     end;
-	     
-	     if !nb_enlargements > 0 then(
-	       print_message Verbose_standard ("Constraint after enlarging:" ^ (if !nb_enlargements > 1 then " ("  ^ (string_of_int !nb_enlargements) ^ " enlargements)" else ""));
-	       print_message Verbose_standard (ModelPrinter.string_of_returned_constraint model.variable_names im_result.result);
-	     );
+	     bc_enlarge_constraint im_result;
 	     
 	  | _ -> raise (InternalError("In function 'cover_behavioral_cartography', the mode should be a cover / border cartography only."))
 	end; (* end process constraint *)
@@ -1133,8 +1141,7 @@ let bc_integrate_result im_result =
 	(* At least checks whether the new constraint is INCLUDED (or equal) into a former one *)
 	(*** TODO: check reverse inclusion / merge constraints together / etc. ***)
 
-	let found = bc_is_included im_result in
-	
+	let found = bc_is_included im_result in	
 	  
 	(* Only add if not found *)
 	if not found then(
