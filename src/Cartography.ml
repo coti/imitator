@@ -1119,14 +1119,10 @@ let rec translate_linear_expression (expr : Ppl_ocaml.linear_expression) =
                                             translate_linear_expression e2] 
   | Ppl_ocaml.Times(k, e) -> Z3Terms.mul [Z3Terms.bigint (gmpz_to_z k);
                                           translate_linear_expression e];;
-  
+
 (* DM *)
-let block_constraint (constr : AbstractModel.returned_constraint) =
-  match constr with
-  | Convex_constraint((poly : Ppl_ocaml.polyhedron), tile_nature) ->
-     let inequalities = Ppl_ocaml.ppl_Polyhedron_get_constraints poly in
-     let z3_inequalities = List.map
-       (function
+let translate_inequality =
+       function
        | Ppl_ocaml.Less_Than(lhs, rhs) ->
            Z3Terms.lt (translate_linear_expression lhs)
 	              (translate_linear_expression rhs)
@@ -1142,9 +1138,17 @@ let block_constraint (constr : AbstractModel.returned_constraint) =
        | Ppl_ocaml.Greater_Or_Equal(lhs, rhs) ->
            Z3Terms.ge (translate_linear_expression lhs)
 	              (translate_linear_expression rhs)
-       ) inequalities in 
-     ()
-  
+
+(* DM *)
+let translate_polyhedron (poly : Ppl_ocaml.polyhedron) =
+     let inequalities = Ppl_ocaml.ppl_Polyhedron_get_constraints poly in
+     Z3Terms.and_ (List.map translate_inequality inequalities)
+
+(* DM *)
+let block_constraint (constr : AbstractModel.returned_constraint) =
+  match constr with
+  | Convex_constraint(poly, tile_nature) ->
+    let to_be_blocked = translate_polyhedron poly in ()
   | Union_of_constraints(_, _) -> failwith "block_constraints does not support Union_of_constraints"
   | NNCConstraint(_, _, _) -> failwith "block_constraints does not support NNCConstraint"
 					     
