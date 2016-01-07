@@ -284,9 +284,32 @@ z3carto = [
   And(dG4_u >= 8, 24 > dG3_u + dG4_u, 24 > dG1_u + dG3_u, dG3_u + dG4_u >= 17, dG2_u >= 11, dG3_u >= 8)
 ]
 
+space = And(dG1_u >= 7, dG1_u <= 30,
+            dG2_u >= 6, dG2_u <= 30,
+            dG3_u >= 8, dG3_u <= 30,
+            dG4_u >= 3, dG4_u <= 30)
+
 def check_equiv(f, g):
   s=Solver()
   s.append(f <> g)
   return s.check() == unsat
 
-print check_equiv(apply(Or, vanilla), apply(Or, z3carto))
+def check_inclusion(f, g):
+  s=Solver()
+  s.append(f)
+  s.append(Not(g))
+  return s.check() == unsat
+
+def check_inclusion_witness(f, g):
+  s=Solver()
+  s.append(f)
+  s.append(Not(g))
+  if s.check() == sat:
+    print s.model()
+
+print check_equiv(apply(Or, vanilla), space)
+print check_equiv(apply(Or, z3carto), space)
+print check_inclusion(apply(Or, z3carto), space)
+print check_inclusion(space, apply(Or, z3carto))
+check_inclusion_witness(apply(Or, z3carto), space)
+check_inclusion_witness(space, apply(Or, z3carto))
