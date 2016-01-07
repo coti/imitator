@@ -1,12 +1,20 @@
 #!/usr/bin/env python
 
-from z3 import Or, And, Implies, ForAll
-from z3 import Ints
-from z3 import solve
+#from z3 import Or, And, Implies, ForAll
+#from z3 import Ints
+#from z3 import solve
 
 import sys
+import z3
+
 import constraints
 
+def printUsage( argv ):
+        print "Missing args"
+        print "Usage:"
+        print "\t", argv[0], "<file1> <file2>"
+        return
+"""
 def david():
     i,x,n,pos = Ints('i x n pos')
 
@@ -37,12 +45,46 @@ def david():
     solve(And(i>pos, n>0, ForAll(x, Implies(And(0<=x, x<n), final))))
     solve(And(final_q, i>pos))
     return
+"""
+def setSpace( parameters ):
+    """
+    # Creating x, y 
+    x = Int('x')
+    y = Int('y')
+    
+    # Creating the formula using Python
+    f = And(x == y, Not(x == y))
+    print f
+    
+    # Using eval to parse the string.
+    s = "And(x == y, Not(x == y))"
+    f2 = eval(s)
+    print f2
+    """
+    
+    s = "z3.And("
+    params = []
+    for p in parameters:
+        pp = z3.Real( p[0] )
+        p.append( pp )
+
+    for p in parameters:
+        interv = p[1].split( ".." )
+        s += p[2] + ">=" + interv[0] + ", " + p[2] + " <=" + interv[1]
+#        s += pp + ">=" + interv[0] + ", " + pp + " <=" + interv[1]
+        if not p == parameters[-1]:
+            s += ", "
+    s += ")"
+    print s
+    f = eval( s )
+    return f
 
 def main( argv ):
     cons = constraints.getConstraints( argv[1] )
     print cons
     param = constraints.getParameters( argv[1] )
     print param
+    setSpace( param )
     return
 
 if __name__ == "__main__":
