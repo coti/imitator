@@ -394,26 +394,18 @@ let gmpq_to_q (x : Gmp.Q.t) : Q.t =
  *)
 let z3_get_point() =
   let model = Input.get_model() in
-  let result = Solver.check ~solver:(model.z3_solver) [] in
-  let z3model = match result with
-    | Unkown _ -> failwith "Oh noees"
-    | Sat (lazy m) -> m
-  in
-  let found_pi0 = match result with
-    | Unsat _ -> false
-    | Sat _ -> true
-  in
-  let pi0 = new PVal.pval in
-
-  Array.iteri (fun i x ->
-	       let value = Model.get_value ~model:z3model x in
-	       pi0#set_value i
+  match Solver.check ~solver:(model.z3_solver) [] with
+  | Unkown _ -> failwith "unknown result from Z3!?"
+  | Sat(lazy z3model) ->		      
+      let pi0 = new PVal.pval in
+        Array.iteri (fun i x ->
+	             let value = Model.get_value ~model:z3model x in
+	             pi0#set_value i
 			     (NumConst.numconst_of_mpq (q_to_gmpq value))
-	      ) model.symb_constraints;
-  
-  current_pi0 := Some pi0;
-  found_pi0
-
+	             ) model.symb_constraints;
+      current_pi0 := Some pi0;
+      true
+  | Unsat _ -> false
 
 (************************************************************)
 (* Initial pi0 functions *)

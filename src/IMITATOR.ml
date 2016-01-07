@@ -339,12 +339,14 @@ end;
 		(* Safety *)
 		exit 1
 	);
+	(* begin DM
 	| _ -> (
 		print_error ("An unknown exception occurred. Please (kindly) insult the developers.");
 		abort_program ();
 		(* Safety *)
 		exit 1
 	);
+	end DM *)
 end; (* try *)
 
 
