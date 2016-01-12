@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import z3
 
 def printUsage( argv ):
         print "Missing args"
@@ -80,12 +81,11 @@ def getParameters( filename ):
 	fd.close()
 	return t
 
-
 def main( argv ):
 	t1 = getConstraints( argv[1] )
 	t2 = getConstraints( argv[2] )
 	cleanConstraints( t1, t2 )
-#	printConstraints( t1, t2 )
+	printConstraints( t1, t2 )
 	print getParameters( argv[1] )
 	return
 

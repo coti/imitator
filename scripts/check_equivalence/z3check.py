@@ -46,46 +46,62 @@ def david():
     solve(And(final_q, i>pos))
     return
 """
-def setSpace( parameters ):
-    """
-    # Creating x, y 
-    x = Int('x')
-    y = Int('y')
-    
-    # Creating the formula using Python
-    f = And(x == y, Not(x == y))
-    print f
-    
-    # Using eval to parse the string.
-    s = "And(x == y, Not(x == y))"
-    f2 = eval(s)
-    print f2
-    """
-    
-    s = "z3.And("
-    params = []
-    for p in parameters:
-        pp = z3.Real( p[0] )
-        p.append( pp )
+def tabToSpace( param ):
+        space = "z3.And("
+        s_string = []
+        for p in param:
+                var = p[0]
+                interval = p[1]
+                bounds = interval.split( ".." )
+                s_interval = var + " >= " + bounds[0] + ", " + var + " <= "+ bounds[1]
+                s_string.append( s_interval )
+        space += ", ".join( s_string )
+        space += ")"
+        return space
 
-    for p in parameters:
-        interv = p[1].split( ".." )
-        s += p[2] + ">=" + interv[0] + ", " + p[2] + " <=" + interv[1]
-#        s += pp + ">=" + interv[0] + ", " + pp + " <=" + interv[1]
-        if not p == parameters[-1]:
-            s += ", "
-    s += ")"
-    print s
-    f = eval( s )
-    return f
+def tabToConstrains( t_in ):
+        t_out = []
+        for t in t_in:
+                c = t.split( " & " )
+                c = ", ".join( c )
+                constraint = "z3.And(" + c + ")"
+                t_out.append( constraint )
+        return t_out
+
+def getTableOfConstraints( filename ):
+        cons = constraints.getConstraints( filename )
+        c = tabToConstrains( cons )
+        return c
+
+def getVariableNames( filename ):
+        tab = []
+        param = constraints.getParameters( filename )
+        for p in param:
+                tab.append( p[0] )
+        return tab
+
+def getParameterSpace( filename ):
+        param = constraints.getParameters( filename )
+        s = tabToSpace( param )
+        return s
+
+def declareRealVariables( filename ):
+        tab = getVariableNames( filename )
+        symb = []
+        for t in tab:
+                print "Declare", t
+                s = z3.Real( t )
+                symb.append( s )
+                globals()[t] = s
+        return symb
 
 def main( argv ):
-    cons = constraints.getConstraints( argv[1] )
-    print cons
-    param = constraints.getParameters( argv[1] )
-    print param
-    setSpace( param )
-    return
+        solv = z3.Solver()
+        c = getTableOfConstraints( argv[1] )
+        s = getParameterSpace( argv[1] )
+        symbols = declareRealVariables( argv[1] )
+        F = eval( s )
+        return
 
 if __name__ == "__main__":
     if len( sys.argv ) < 2:
