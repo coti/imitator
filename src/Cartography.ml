@@ -388,7 +388,18 @@ let q_to_gmpq (x : Q.t) : Gmp.Q.t =
 let gmpq_to_q (x : Gmp.Q.t) : Q.t =
   Q.(///) (gmpz_to_z (Gmp.Q.get_num x))
 	  (gmpz_to_z (Gmp.Q.get_den x))
-	    
+
+let point_to_string (point : PVal.pval) =
+  let buf = Buffer.create 20 in
+  Buffer.add_string buf "(";
+  for i=0 to (PVal.get_dimensions ())-1
+  do
+    Buffer.add_string buf " ";
+    Buffer.add_string buf (NumConst.string_of_numconst (point#get_value i)) 
+  done;
+  Buffer.add_string buf " )";
+  Buffer.contents buf;;
+		     
 (** Ask Z3 to pick up a point  that satisfies the constraints
  * Return (found_pi0 : bool)
  *)
@@ -396,15 +407,23 @@ let z3_get_point() =
   let model = Input.get_model() in
   match Solver.check ~solver:(model.z3_solver) [] with
   | Unkown _ -> failwith "unknown result from Z3!?"
-  | Sat(lazy z3model) ->		      
-      let pi0 = new PVal.pval in
-        Array.iteri (fun i x ->
-	             let value = Model.get_value ~model:z3model x in
-	             pi0#set_value i
+  | Sat(lazy z3model) ->
+      begin
+        let pi0 = new PVal.pval in
+          Array.iteri (fun i x ->
+	               let value = Model.get_value ~model:z3model x in
+	               pi0#set_value i
 			     (NumConst.numconst_of_mpq (q_to_gmpq value))
-	             ) model.symb_constraints;
-      current_pi0 := Some pi0;
-      true
+	              ) model.symb_constraints;
+	print_message Verbose_standard ("generating point: " ^ (point_to_string pi0));
+	(* begin
+          match !current_pi0 with
+	  | Some old_pi0 when old_pi0 = pi0 -> failwith "looping on point"
+	  | _ -> ();
+        end; *)
+        current_pi0 := Some pi0;
+        true
+      end
   | Unsat _ -> false
 
 (************************************************************)
@@ -1148,65 +1167,89 @@ let block_constraint (constr : AbstractModel.returned_constraint) =
     let to_be_blocked = translate_polyhedron model.symb_constraints poly in
     Z3Types.Solver.add ~solver:(model.z3_solver) (Z3Terms.not to_be_blocked)
   | Union_of_constraints(_, _) -> failwith "block_constraints does not support Union_of_constraints"
-  | NNCConstraint(_, _, _) -> failwith "block_constraints does not support NNCConstraint"
-					     
+  | NNCConstraint(_, _, _) -> failwith "block_constraints does not support NNCConstraint";;
+
+(** Block an area around the last point, because it resulted in a timeout or other error *)
+
+let block_around_model im_result =
+  let model = Input.get_model() in
+  match !current_pi0 with
+  | None -> failwith "block_around_model with no last model"
+  | Some pi0 ->
+     let list_of_avoidances = ref [] in
+     for i=0 to (PVal.get_dimensions ())-1
+     do
+       let px = gmpq_to_q (NumConst.mpq_of_numconst (pi0#get_value i))
+       and var = Z3Terms.symbol (Array.get model.symb_constraints i) in
+       list_of_avoidances :=
+	  (Z3Terms.ge var (Z3Terms.rat (Q.add Q.one px))) ::
+          (Z3Terms.le var (Z3Terms.rat (Q.sub Q.one px))) ::
+	  !list_of_avoidances     
+     done;
+     Z3Types.Solver.add ~solver:(model.z3_solver)
+	 (Z3Terms.or_ !list_of_avoidances);;
+
 (** Integrate the computed constraint 
- **)
+ **)				      
 let bc_integrate_result im_result =
 	(* Get the model *)
 	let model = Input.get_model() in
 	(* Retrieve the input options *)
 	let options = Input.get_options () in
 
-	if im_result.premature_stop then(
-	  print_message Verbose_standard "This constraint is valid despite premature termination.";
-	);
-	
-	(* Print the constraint *)
-	bc_print_constraint im_result;
-	(* Process the constraint(s) in some cases *)
 	begin
-	  (* Branching *)
-	  match options#imitator_mode with
-	  | Cover_cartography ->
-	     (* Just return the constraint *)
-	     ()
+	  if im_result.premature_stop
+	  then
+	    print_message Verbose_standard "This constraint is valid despite premature termination."
+	end;
+	begin
+	
+	  (* Print the constraint *)
+	  bc_print_constraint im_result;
+	  (* Process the constraint(s) in some cases *)
+	  begin
+	    (* Branching *)
+	    match options#imitator_mode with
+	    | Cover_cartography ->
+	       (* Just return the constraint *)
+	       ()
+		 
+	    | Border_cartography ->
+	       bc_enlarge_constraint im_result;
 	       
-	  | Border_cartography ->
-	     bc_enlarge_constraint im_result;
-	     
-	  | _ -> raise (InternalError("In function 'cover_behavioral_cartography', the mode should be a cover / border cartography only."))
-	end; (* end process constraint *)
-	
-	
-	(* Add the pi0 and the computed constraint *)
-	(* USELESS SO FAR 
-		DynArray.add pi0_computed pi0; *)
-	
-	(*------------------------------------------------------------*)
-	(* At least checks whether the new constraint is INCLUDED (or equal) into a former one *)
-	(*** TODO: check reverse inclusion / merge constraints together / etc. ***)
-
-	let found = bc_is_included im_result in	
+	    | _ -> raise (InternalError("In function 'cover_behavioral_cartography', the mode should be a cover / border cartography only."))
+	  end; (* end process constraint *)
 	  
-	(* Only add if not found *)
-	if not found then(
-	  print_message Verbose_medium "Constraint not found earlier: add.";
-	  (*** TODO: add to file if options#output_result is enabled ***)
-	  DynArray.add !computed_constraints im_result.result;
-	)else(
-	  (*** TODO: add a counter or something, for information purpose ***)
-	  ()
-	);
-	
-	(* CC + DM *)
-	block_constraint im_result.result;
-	
+	  
+	  (* Add the pi0 and the computed constraint *)
+	  (* USELESS SO FAR 
+		DynArray.add pi0_computed pi0; *)
+	  
+	  (*------------------------------------------------------------*)
+	  (* At least checks whether the new constraint is INCLUDED (or equal) into a former one *)
+	  (*** TODO: check reverse inclusion / merge constraints together / etc. ***)
+	  
+	  let found = bc_is_included im_result in	
+	  
+	  (* Only add if not found *)
+	  if not found then(
+	    print_message Verbose_medium "Constraint not found earlier: add.";
+	    (*** TODO: add to file if options#output_result is enabled ***)
+	    DynArray.add !computed_constraints im_result.result;
+	  )else(
+	    (*** TODO: add a counter or something, for information purpose ***)
+	    ()
+	  );
+	    
+	  (* CC + DM *)
+	  block_constraint im_result.result;
+	  
 	(*------------------------------------------------------------*)
 	
 	(* Return true only if really added *)
-	not (found)
-	    
+	  not (found)
+	end
+	  
 
 (*------------------------------------------------------------*)
 (** Auxiliary function: process the result of IM; return true if the constraint is indeed added, false otherwise *)
@@ -1256,6 +1299,8 @@ let bc_process_im_result im_result =
 	
 	(* INVALID RESULT *)
 	)else(
+	        block_around_model im_result;
+	  
 		print_message Verbose_standard "This constraint is discarded due to premature termination.";
 		
 		(*** TODO: add 1 to the number of invalid points *)
