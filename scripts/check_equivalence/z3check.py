@@ -14,38 +14,7 @@ def printUsage( argv ):
         print "Usage:"
         print "\t", argv[0], "<file1> <file2>"
         return
-"""
-def david():
-    i,x,n,pos = Ints('i x n pos')
 
-    precond = And(x>=0, x<n, pos>=0, pos<n)
-
-    error = Or(And(n>=pos+1, x<=pos-1, x>=0),
-               And(x>=pos+1, n>=x+2, pos>=0),
-               And(n==x+1, x>=pos+1, pos>=0))
-
-    error_q = And(precond, ForAll(x, Implies(precond, error)))
-
-    solve(error_q) # no solution
-
-    final = Or(
-        And(pos==x, i<=x-1, i>=0, n>=x+1),
-        And(i==x, i>=0, n>=pos+1, i<=pos-1),
-        And(x>=pos+1, i<=x-1, i>=0, n>=x+1, pos>=0),
-        And(i==x, i<=n-1, i>=pos+1, pos>=0),
-        And(i>=x+1, n>=pos+1, i<=n-1, x<=pos-1, x>=0),
-        And(i<=x-1, i>=0, n>=pos+1, x<=pos-1),
-        And(i==x, i==pos, i>=0, i<=n-1),
-        And(x>=pos+1, i>=x+1, i<=n-1, pos>=0))
-
-    final_q = And(precond, ForAll(x, Implies(precond, final)))
-    
-    solve(And(final,i>pos))
-    solve(final_q)
-    solve(And(i>pos, n>0, ForAll(x, Implies(And(0<=x, x<n), final))))
-    solve(And(final_q, i>pos))
-    return
-"""
 def tabToSpace( param ):
         space = "z3.And("
         s_string = []
@@ -95,12 +64,53 @@ def declareRealVariables( filename ):
                 globals()[t] = s
         return symb
 
-def main( argv ):
+def applyOr( tab ):
+        cons = "z3.Or(" + ", ".join( tab ) + ")"
+        return cons
+
+def Not( cons ):
+        cons = "z3.Not(" + cons + ")"
+        return cons
+
+def check_equiv( f, g ):
         solv = z3.Solver()
-        c = getTableOfConstraints( argv[1] )
-        s = getParameterSpace( argv[1] )
+        formula = eval( f + " <> " + g )
+        solv.append( formula )
+        return solv.check() == z3.unsat
+
+def check_inclusion( f, g ):
+        solv = z3.Solver()
+        formula = eval( f )
+        solv.append( formula )
+        gormula = eval( Not( g ) )
+        solv.append( gormula )
+        return solv.check() == z3.unsat
+
+def check_inclusion_witness( f, g ):
+        solv = z3.Solver()
+        formula = eval( f )
+        solv.append( formula )
+        gormula = eval( Not( g ) )
+        solv.append( gormula )
+        if solv.check() == z3.sat:
+                print solv.model()
+        return
+
+def main( argv ):
+        z3carto = getTableOfConstraints( argv[1] )
+        vanilla = getTableOfConstraints( argv[2] )
+        space = getParameterSpace( argv[1] )
         symbols = declareRealVariables( argv[1] )
-        F = eval( s )
+
+        print " =-=-= CARTOZ3 =-=-="
+        print check_equiv( applyOr( z3carto ), space )
+        print check_inclusion( applyOr( z3carto ), space)
+        check_inclusion_witness( applyOr( z3carto ), space )
+
+        print " =-=-= VANILLA =-=-="
+        print check_equiv( applyOr( vanilla ), space )
+        print check_inclusion( applyOr( vanilla ), space)
+        check_inclusion_witness( applyOr( vanilla ), space )
         return
 
 if __name__ == "__main__":
