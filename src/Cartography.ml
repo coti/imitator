@@ -1164,9 +1164,20 @@ let block_constraint (constr : AbstractModel.returned_constraint) =
   let model = Input.get_model() in
   match constr with
   | Convex_constraint(poly, tile_nature) ->
-    let to_be_blocked = translate_polyhedron model.symb_constraints poly in
+     let to_be_blocked = translate_polyhedron model.symb_constraints poly in
+     print_message Verbose_high ("blocking polyhedron: " ^ (Z3Terms.to_string to_be_blocked));
     Z3Types.Solver.add ~solver:(model.z3_solver) (Z3Terms.not to_be_blocked)
-  | Union_of_constraints(_, _) -> failwith "block_constraints does not support Union_of_constraints"
+
+  | Union_of_constraints(polys, tile_nature) ->
+     List.iter
+       (fun poly ->
+	 let to_be_blocked =
+           translate_polyhedron model.symb_constraints poly in
+         print_message Verbose_high ("blocking union part: " ^ (Z3Terms.to_string to_be_blocked)); 
+	 Z3Types.Solver.add ~solver:(model.z3_solver)
+			    (Z3Terms.not to_be_blocked)
+       ) polys
+ 		
   | NNCConstraint(_, _, _) -> failwith "block_constraints does not support NNCConstraint";;
 
 (** Block an area around the last point, because it resulted in a timeout or other error *)
@@ -1176,18 +1187,22 @@ let block_around_model im_result =
   match !current_pi0 with
   | None -> failwith "block_around_model with no last model"
   | Some pi0 ->
+     print_message Verbose_high "block_around_model around last point";
      let list_of_avoidances = ref [] in
      for i=0 to (PVal.get_dimensions ())-1
      do
        let px = gmpq_to_q (NumConst.mpq_of_numconst (pi0#get_value i))
        and var = Z3Terms.symbol (Array.get model.symb_constraints i) in
+       (* print_warning (Printf.sprintf "point[%d] = %s" i (Q.to_string px)); *)
        list_of_avoidances :=
-	  (Z3Terms.ge var (Z3Terms.rat (Q.add Q.one px))) ::
-          (Z3Terms.le var (Z3Terms.rat (Q.sub Q.one px))) ::
+	  (Z3Terms.ge var (Z3Terms.rat (Q.add px Q.one))) ::
+          (Z3Terms.le var (Z3Terms.rat (Q.sub px Q.one))) ::
 	  !list_of_avoidances     
      done;
-     Z3Types.Solver.add ~solver:(model.z3_solver)
-	 (Z3Terms.or_ !list_of_avoidances);;
+
+     let to_be_blocked = Z3Terms.or_ !list_of_avoidances in 
+     print_message Verbose_high ("blocking bad area: " ^ (Z3Terms.to_string to_be_blocked)); 
+     Z3Types.Solver.add ~solver:(model.z3_solver) to_be_blocked;;
 
 (** Integrate the computed constraint 
  **)				      
