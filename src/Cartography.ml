@@ -1210,7 +1210,62 @@ let string_of_linear_generator
   | Closure_Point(e, c) -> Printf.sprintf "(closure_point %s %s)"
 		     (string_of_linear_expression variable_names e)
 		     (Gmp.Z.to_string c);;
-		      
+
+(* DM *)
+type coord_bound =
+  | Coord_none
+  | Coord_infinity
+  | Coord_nonstrict of Q.t
+  | Coord_strict of Q.t;;
+
+(* DM *)
+let rec coefficients_of_linear_expression_into_array
+      (expr : Ppl_ocaml.linear_expression)
+      (vec : Z.t array) : unit =
+  match expr with
+  | Plus(e1, e2) ->
+     coefficients_of_linear_expression_into_array e1 vec;
+     coefficients_of_linear_expression_into_array e2 vec
+  | Times(c, Variable x) ->
+     Array.set vec x (Z.add (Array.get vec x) (gmpz_to_z c));;
+
+let coefficients_of_linear_expression_to_array
+      (expr : Ppl_ocaml.linear_expression) : Z.t array =
+  let vec = Array.create (PVal.get_dimensions()) Z.zero in
+  coefficients_of_linear_expression_into_array expr vec;
+  vec;;
+
+type direction = Plus_infinity | Minus_infinity
+				   
+let bounds_of_linear_generator
+      (gen : Ppl_ocaml.linear_generator) (dir : direction) =
+  match gen with
+  | Line e ->
+     Array.map
+       (function x -> if Z.equal x Z.zero then Coord_none else Coord_infinity)
+       (coefficients_of_linear_expression_to_array e)
+
+  | Ray e ->
+    Array.map (function x ->
+	       if (match dir with
+		   | Plus_infinity -> Z.gt x Z.zero
+		   | Minus_infinity -> Z.lt x Z.zero)
+	       then Coord_infinity
+	       else Coord_none)
+	      (coefficients_of_linear_expression_to_array e)
+	      
+  | Point(e, gmp_denominator) ->
+     let denominator = gmpz_to_z gmp_denominator in
+     Array.map (fun numerator ->
+	       Coord_nonstrict (Q.make numerator denominator))
+              (coefficients_of_linear_expression_to_array e)
+	      
+  | Closure_Point(e, gmp_denominator) ->
+     let denominator = gmpz_to_z gmp_denominator in
+     Array.map (fun numerator ->
+	       Coord_strict (Q.make numerator denominator))
+              (coefficients_of_linear_expression_to_array e);;
+  
 (* DM *)
 let translate_polyhedron_box model poly =
   print_warning "begin generators";
