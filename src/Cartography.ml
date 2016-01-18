@@ -1212,23 +1212,25 @@ let string_of_linear_generator
 		     (Gmp.Z.to_string c);;
 		      
 (* DM *)
-let translate_polyhedron_box symbols poly =
+let translate_polyhedron_box model poly =
+  print_warning "begin generators";
   List.iter
-    (fun gen -> ())
+    (fun gen -> print_warning
+		  (string_of_linear_generator model.variable_names gen))
     (Ppl_ocaml.ppl_Polyhedron_get_generators poly);;
 	    
   
 (* DM *)
-let translate_polyhedron symbols poly =
-  translate_polyhedron_box symbols poly;
-  translate_polyhedron_constraints symbols poly;;
+let translate_polyhedron model poly =
+  translate_polyhedron_box model poly;
+  translate_polyhedron_constraints model.symb_constraints poly;;
 				   
 (* DM *)
 let block_constraint (constr : AbstractModel.returned_constraint) =
   let model = Input.get_model() in
   match constr with
   | Convex_constraint(poly, tile_nature) ->
-     let to_be_blocked = translate_polyhedron model.symb_constraints poly in
+     let to_be_blocked = translate_polyhedron model poly in
      print_message Verbose_high ("blocking polyhedron: " ^ (Z3Terms.to_string to_be_blocked));
     Z3Types.Solver.add ~solver:(model.z3_solver) (Z3Terms.not to_be_blocked)
 
@@ -1236,7 +1238,7 @@ let block_constraint (constr : AbstractModel.returned_constraint) =
      List.iter
        (fun poly ->
 	 let to_be_blocked =
-           translate_polyhedron model.symb_constraints poly in
+           translate_polyhedron model poly in
          print_message Verbose_high ("blocking union part: " ^ (Z3Terms.to_string to_be_blocked)); 
 	 Z3Types.Solver.add ~solver:(model.z3_solver)
 			    (Z3Terms.not to_be_blocked)
