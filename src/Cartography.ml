@@ -1155,10 +1155,58 @@ let translate_inequality symbols (inequality : Ppl_ocaml.linear_constraint) : Z3
 	              (translate_linear_expression symbols rhs)
 
 (* DM *)
-let translate_polyhedron symbols (poly : Ppl_ocaml.polyhedron) =
+let translate_polyhedron_constraints symbols (poly : Ppl_ocaml.polyhedron) =
      let inequalities = Ppl_ocaml.ppl_Polyhedron_get_constraints poly in
-     Z3Terms.and_ (List.map (translate_inequality symbols) inequalities)
+     Z3Terms.and_ (List.map (translate_inequality symbols) inequalities);;
 
+(* DM *)
+let rec linear_expression_to_buffer (buf : Buffer.t)
+				    (variable_names : int -> string)
+				    (expr : Ppl_ocaml.linear_expression) =
+  match expr with
+  | Variable x ->Buffer.add_string buf (variable_names x)
+  | Coefficient z ->Buffer.add_string buf (Gmp.Z.to_string z)
+  | Unary_Plus e ->Buffer.add_string buf "(+ ";
+		    linear_expression_to_buffer buf variable_names e;
+		   Buffer.add_string buf ")"
+  | Unary_Minus e ->Buffer.add_string buf "(- ";
+		     linear_expression_to_buffer buf variable_names e;
+		    Buffer.add_string buf ")"
+  | Plus(e1, e2) ->Buffer.add_string buf "(+ ";
+		   linear_expression_to_buffer buf variable_names e1;
+		   Buffer.add_string buf " ";
+		   linear_expression_to_buffer buf variable_names e2;
+		   Buffer.add_string buf ")"
+  | Minus(e1, e2) ->Buffer.add_string buf "(- ";
+	 	    linear_expression_to_buffer buf variable_names e1;
+	 	    Buffer.add_string buf " ";
+		    linear_expression_to_buffer buf variable_names e2;
+		    Buffer.add_string buf ")"
+  | Times(z, e) ->Buffer.add_string buf "(* ";
+		  Buffer.add_string buf (Gmp.Z.to_string z);
+		  Buffer.add_string buf " ";
+		   linear_expression_to_buffer buf variable_names e;
+		  Buffer.add_string buf ")";;
+
+let string_of_linear_expression
+  (variable_names : int -> string)
+  (expr : Ppl_ocaml.linear_expression) =
+  let buf = Buffer.create 30 in
+  linear_expression_to_buffer buf variable_names expr;
+  Buffer.contents buf;;
+				    
+(* DM *)
+let translate_polyhedron_box symbols poly =
+  List.iter
+    (fun gen -> ())
+    (Ppl_ocaml.ppl_Polyhedron_get_generators poly);;
+	    
+  
+(* DM *)
+let translate_polyhedron symbols poly =
+  translate_polyhedron_box symbols poly;
+  translate_polyhedron_constraints symbols poly;;
+				   
 (* DM *)
 let block_constraint (constr : AbstractModel.returned_constraint) =
   let model = Input.get_model() in
