@@ -1185,16 +1185,32 @@ let rec linear_expression_to_buffer (buf : Buffer.t)
   | Times(z, e) ->Buffer.add_string buf "(* ";
 		  Buffer.add_string buf (Gmp.Z.to_string z);
 		  Buffer.add_string buf " ";
-		   linear_expression_to_buffer buf variable_names e;
+		  linear_expression_to_buffer buf variable_names e;
 		  Buffer.add_string buf ")";;
 
+(* DM *)
 let string_of_linear_expression
   (variable_names : int -> string)
   (expr : Ppl_ocaml.linear_expression) =
   let buf = Buffer.create 30 in
   linear_expression_to_buffer buf variable_names expr;
   Buffer.contents buf;;
-				    
+
+let string_of_linear_generator
+  (variable_names : int -> string)
+  (gen : Ppl_ocaml.linear_generator) =
+  match gen with
+  | Line e -> Printf.sprintf "(line %s)"
+			     (string_of_linear_expression variable_names e)
+  | Ray e -> Printf.sprintf "(ray %s)"
+			    (string_of_linear_expression variable_names e)
+  | Point(e, c) -> Printf.sprintf "(point %s %s)"
+		     (string_of_linear_expression variable_names e)
+		     (Gmp.Z.to_string c)
+  | Closure_Point(e, c) -> Printf.sprintf "(closure_point %s %s)"
+		     (string_of_linear_expression variable_names e)
+		     (Gmp.Z.to_string c);;
+		      
 (* DM *)
 let translate_polyhedron_box symbols poly =
   List.iter
