@@ -1265,14 +1265,35 @@ let bounds_of_linear_generator
      Array.map (fun numerator ->
 	       Coord_strict (Q.make numerator denominator))
               (coefficients_of_linear_expression_to_array e);;
+
+let array_map2 (f : 'a -> 'b -> 'c) (a : 'a array) (b : 'b array) =
+  assert ((Array.length a) = (Array.length b));
+  Array.mapi (fun i x -> f x (Array.get b i)) a;;
+
+let bounds_lub a b =
+  array_map2
+    (fun x y ->
+     match x,y with
+     | Coord_none, z | z, Coord_none -> z
+     | Coord_infinity, _ | _, Coord_infinity -> Coord_infinity
+     | (Coord_strict u | Coord_nonstrict u),
+       (Coord_strict v | Coord_nonstrict v) when Q.gt u v -> x
+     | (Coord_strict u | Coord_nonstrict u),
+       (Coord_strict v | Coord_nonstrict v) when Q.lt u v -> y
+     | ((Coord_nonstrict _) as w), _
+     | _, ((Coord_nonstrict _) as w) -> w
+     | _, _ -> x) a b;;					  
+
+let unbounded () = Array.create (PVal.get_dimensions()) Coord_none;;
   
 (* DM *)
 let translate_polyhedron_box model poly =
-  print_warning "begin generators";
-  List.iter
-    (fun gen -> print_warning
-		  (string_of_linear_generator model.variable_names gen))
-    (Ppl_ocaml.ppl_Polyhedron_get_generators poly);;
+  let generators = Ppl_ocaml.ppl_Polyhedron_get_generators poly in
+  let upper_bounds =
+    List.fold_left (fun prev gen -> bounds_lub prev
+	(bounds_of_linear_generator gen Plus_infinity))
+        (unbounded ()) generators		   
+  in () ;;
 	    
   
 (* DM *)
