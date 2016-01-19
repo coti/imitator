@@ -321,6 +321,7 @@ end;
 		(* Safety *)
 		exit 1
 	);
+	(* begin DM
 	| Failure msg -> (
 		print_error ("'Failure' exception: '" ^ msg ^ "'\nPlease (kindly) insult the developers.");
 		abort_program ();
@@ -339,7 +340,6 @@ end;
 		(* Safety *)
 		exit 1
 	);
-	(* begin DM
 	| _ -> (
 		print_error ("An unknown exception occurred. Please (kindly) insult the developers.");
 		abort_program ();

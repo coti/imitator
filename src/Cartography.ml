@@ -1218,32 +1218,55 @@ type coord_bound =
   | Coord_nonstrict of Q.t
   | Coord_strict of Q.t;;
 
+let string_of_coord_bound = function
+  | Coord_none -> "none"
+  | Coord_infinity -> "inf"
+  | Coord_nonstrict x -> Q.to_string x
+  | Coord_strict x -> "#" ^ (Q.to_string x)
+			      
 (* DM *)
 let rec coefficients_of_linear_expression_into_array
-      (expr : Ppl_ocaml.linear_expression)
-      (vec : Z.t array) : unit =
+	  (expr : Ppl_ocaml.linear_expression)
+	  (mul : Z.t)
+          (vec : Z.t array) : unit =
   match expr with
   | Plus(e1, e2) ->
-     coefficients_of_linear_expression_into_array e1 vec;
-     coefficients_of_linear_expression_into_array e2 vec
-  | Times(c, Variable x) ->
-     Array.set vec x (Z.add (Array.get vec x) (gmpz_to_z c));;
+     coefficients_of_linear_expression_into_array e1 mul vec;
+     coefficients_of_linear_expression_into_array e2 mul vec
+  | Minus(e1, e2) ->
+     coefficients_of_linear_expression_into_array e1 mul vec;
+     coefficients_of_linear_expression_into_array e2 (Z.neg mul) vec
+  | Variable x ->
+     if x<0 then failwith "negative variable"
+     else if x>=(Array.length vec)
+     then () (* DM fixme *)
+     else Array.set vec x (Z.add (Array.get vec x) mul)
+  | Times(c, e) ->
+     coefficients_of_linear_expression_into_array e (Z.mul (gmpz_to_z c) mul) vec
+  | Unary_Minus e ->
+     coefficients_of_linear_expression_into_array e (Z.neg mul) vec     
+  | Unary_Plus e -> 
+     coefficients_of_linear_expression_into_array e mul vec
+  | Coefficient c when Gmp.Z.is_zero c -> ()
+  | Coefficient _ -> failwith "coefficient";;
+
 
 let coefficients_of_linear_expression_to_array
-      (expr : Ppl_ocaml.linear_expression) : Z.t array =
-  let vec = Array.create (PVal.get_dimensions()) Z.zero in
-  coefficients_of_linear_expression_into_array expr vec;
+      model (expr : Ppl_ocaml.linear_expression) : Z.t array =
+  let vec = Array.create (Array.length model.symb_constraints) Z.zero in
+  (* print_warning ("MIAOU" ^ (string_of_linear_expression model.variable_names expr)); *)
+  coefficients_of_linear_expression_into_array expr Z.one vec;
   vec;;
 
 type direction = Plus_infinity | Minus_infinity
 				   
-let bounds_of_linear_generator
+let bounds_of_linear_generator model
       (gen : Ppl_ocaml.linear_generator) (dir : direction) =
   match gen with
   | Line e ->
      Array.map
        (function x -> if Z.equal x Z.zero then Coord_none else Coord_infinity)
-       (coefficients_of_linear_expression_to_array e)
+       (coefficients_of_linear_expression_to_array model e)
 
   | Ray e ->
     Array.map (function x ->
@@ -1252,54 +1275,94 @@ let bounds_of_linear_generator
 		   | Minus_infinity -> Z.lt x Z.zero)
 	       then Coord_infinity
 	       else Coord_none)
-	      (coefficients_of_linear_expression_to_array e)
+	      (coefficients_of_linear_expression_to_array model e)
 	      
   | Point(e, gmp_denominator) ->
      let denominator = gmpz_to_z gmp_denominator in
      Array.map (fun numerator ->
 	       Coord_nonstrict (Q.make numerator denominator))
-              (coefficients_of_linear_expression_to_array e)
+              (coefficients_of_linear_expression_to_array model e)
 	      
   | Closure_Point(e, gmp_denominator) ->
      let denominator = gmpz_to_z gmp_denominator in
      Array.map (fun numerator ->
 	       Coord_strict (Q.make numerator denominator))
-              (coefficients_of_linear_expression_to_array e);;
+              (coefficients_of_linear_expression_to_array model e);;
 
 let array_map2 (f : 'a -> 'b -> 'c) (a : 'a array) (b : 'b array) =
   assert ((Array.length a) = (Array.length b));
   Array.mapi (fun i x -> f x (Array.get b i)) a;;
 
-let bounds_lub a b =
+let bounds_lub dir a b =
   array_map2
     (fun x y ->
      match x,y with
      | Coord_none, z | z, Coord_none -> z
      | Coord_infinity, _ | _, Coord_infinity -> Coord_infinity
      | (Coord_strict u | Coord_nonstrict u),
-       (Coord_strict v | Coord_nonstrict v) when Q.gt u v -> x
+       (Coord_strict v | Coord_nonstrict v)
+	  when (match dir with
+		| Plus_infinity -> Q.gt u v
+	        | Minus_infinity -> Q.lt u v) -> x
      | (Coord_strict u | Coord_nonstrict u),
-       (Coord_strict v | Coord_nonstrict v) when Q.lt u v -> y
+       (Coord_strict v | Coord_nonstrict v)
+	  when (match dir with
+		| Plus_infinity -> Q.lt u v
+		| Minus_infinity -> Q.gt u v) -> y
      | ((Coord_nonstrict _) as w), _
      | _, ((Coord_nonstrict _) as w) -> w
      | _, _ -> x) a b;;					  
 
-let unbounded () = Array.create (PVal.get_dimensions()) Coord_none;;
+let unbounded model = Array.create
+			(Array.length model.symb_constraints) Coord_none;;
   
 (* DM *)
 let translate_polyhedron_box model poly =
+  Printf.printf "get_dimensions()=%d  len(symb_constraints)=%d  poly_dimension=%d  nb_params=%d\n" (PVal.get_dimensions()) (Array.length model.symb_constraints) (Ppl_ocaml.ppl_Polyhedron_space_dimension poly) model.nb_parameters;
   let generators = Ppl_ocaml.ppl_Polyhedron_get_generators poly in
   let upper_bounds =
-    List.fold_left (fun prev gen -> bounds_lub prev
-	(bounds_of_linear_generator gen Plus_infinity))
-        (unbounded ()) generators		   
-  in () ;;
+    List.fold_left (fun prev gen -> bounds_lub Plus_infinity prev
+	(bounds_of_linear_generator model gen Plus_infinity))
+        (unbounded model) generators		   
+  and lower_bounds =
+    List.fold_left (fun prev gen -> bounds_lub Minus_infinity prev
+	(bounds_of_linear_generator model gen Minus_infinity))
+		   (unbounded model) generators
+
+  and cv_upper_bound i b = match b with
+    | Coord_infinity -> Z3Terms.true_
+    | Coord_none -> failwith "cv_upper_bound on empty polyhedron"
+    | Coord_strict x -> Z3Terms.lt (Z3Terms.symbol (Array.get model.symb_constraints i))
+				   (Z3Terms.rat x)
+    | Coord_nonstrict x -> Z3Terms.le (Z3Terms.symbol (Array.get model.symb_constraints i))
+				      (Z3Terms.rat x)
+
+  and cv_lower_bound i b = match b with
+    | Coord_infinity -> Z3Terms.true_
+    | Coord_none -> failwith "cv_upper_bound on empty polyhedron"
+    | Coord_strict x -> Z3Terms.gt (Z3Terms.symbol (Array.get model.symb_constraints i))
+				   (Z3Terms.rat x)
+    | Coord_nonstrict x -> Z3Terms.ge (Z3Terms.symbol (Array.get model.symb_constraints i))
+				      (Z3Terms.rat x)
+			  
+  in (*
+     Array.iteri
+       (fun i bound ->
+	  Printf.printf "%s >= %s; " (model.variable_names i)
+			(string_of_coord_bound bound)) lower_bounds;
+     Array.iteri
+       (fun i bound ->
+	  Printf.printf "%s <= %s; " (model.variable_names i)
+			(string_of_coord_bound bound)) upper_bounds
+      *)
+  Z3Terms.and_ ((Array.to_list (Array.mapi cv_upper_bound upper_bounds))
+	      @ (Array.to_list (Array.mapi cv_lower_bound lower_bounds)));;
 	    
   
 (* DM *)
 let translate_polyhedron model poly =
-  translate_polyhedron_box model poly;
-  translate_polyhedron_constraints model.symb_constraints poly;;
+  Z3Terms.and_ [translate_polyhedron_box model poly;
+    translate_polyhedron_constraints model.symb_constraints poly];;
 				   
 (* DM *)
 let block_constraint (constr : AbstractModel.returned_constraint) =

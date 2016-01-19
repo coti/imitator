@@ -15,6 +15,9 @@
  #
 ################################################################
 
+OCAMLRUNPARAM=b
+export OCAMLRUNPARAM
+
 if [ -f "setup.ml" ]
 then
   ocaml setup.ml -distclean
