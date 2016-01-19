@@ -1239,7 +1239,12 @@ let rec coefficients_of_linear_expression_into_array
   | Variable x ->
      if x<0 then failwith "negative variable"
      else if x>=(Array.length vec)
-     then () (* DM fixme *)
+     then () (* DM note
+             coordinate higher than the correct dimensions
+             this should happen only in lines
+             e.g. polyhedron has dimension 4 in a,b,x,y
+             the parameters are a,b
+             and no constraint depends on x,y *)
      else Array.set vec x (Z.add (Array.get vec x) mul)
   | Times(c, e) ->
      coefficients_of_linear_expression_into_array e (Z.mul (gmpz_to_z c) mul) vec
@@ -1254,7 +1259,6 @@ let rec coefficients_of_linear_expression_into_array
 let coefficients_of_linear_expression_to_array
       model (expr : Ppl_ocaml.linear_expression) : Z.t array =
   let vec = Array.create (Array.length model.symb_constraints) Z.zero in
-  (* print_warning ("MIAOU" ^ (string_of_linear_expression model.variable_names expr)); *)
   coefficients_of_linear_expression_into_array expr Z.one vec;
   vec;;
 
@@ -1264,6 +1268,7 @@ let bounds_of_linear_generator model
       (gen : Ppl_ocaml.linear_generator) (dir : direction) =
   match gen with
   | Line e ->
+     (* print_warning ("MIAOU" ^ (string_of_linear_expression model.variable_names e)); *)
      Array.map
        (function x -> if Z.equal x Z.zero then Coord_none else Coord_infinity)
        (coefficients_of_linear_expression_to_array model e)
@@ -1318,7 +1323,7 @@ let unbounded model = Array.create
   
 (* DM *)
 let translate_polyhedron_box model poly =
-  Printf.printf "get_dimensions()=%d  len(symb_constraints)=%d  poly_dimension=%d  nb_params=%d\n" (PVal.get_dimensions()) (Array.length model.symb_constraints) (Ppl_ocaml.ppl_Polyhedron_space_dimension poly) model.nb_parameters;
+  (* Printf.printf "get_dimensions()=%d  len(symb_constraints)=%d  poly_dimension=%d  nb_params=%d\n" (PVal.get_dimensions()) (Array.length model.symb_constraints) (Ppl_ocaml.ppl_Polyhedron_space_dimension poly) model.nb_parameters; *)
   let generators = Ppl_ocaml.ppl_Polyhedron_get_generators poly in
   let upper_bounds =
     List.fold_left (fun prev gen -> bounds_lub Plus_infinity prev
